@@ -14,8 +14,11 @@ int xPos = 135;  // Center position for 270-degree servo
 int yPos = 0;
 
 // Servo pulse width range (microseconds)
-int minPulseWidth = 500;   // Adjust according to your servo's datasheet
-int maxPulseWidth = 2500;  // Adjust according to your servo's datasheet
+int minPulseWidth = 500;
+int maxPulseWidth = 2500;
+
+// Set Solenoid Pin
+const int solenoidPin = 13;
 
 void setup() {
   Serial.begin(115200);
@@ -25,8 +28,12 @@ void setup() {
   yServo.attach(9, minPulseWidth, maxPulseWidth);
 
   // Move servos to initial positions
-  xServo.write(xPos);
-  yServo.write(yPos);
+  xServo.writeMicroseconds(angleToPulseWidth(xPos));
+  yServo.writeMicroseconds(angleToPulseWidth(yPos));
+  
+  // Set Up Solenoid Pin
+  pinMode(solenoidPin, OUTPUT);
+  digitalWrite(solenoidPin, LOW);
 
   // Connect to Wi-Fi network
   WiFi.begin(ssid, password);
@@ -39,6 +46,9 @@ void setup() {
   Serial.println("Connected to WiFi");
   Serial.println(WiFi.localIP());
 
+  // Wifi Connected Confirmation Sequence
+  yServo.writeMicroseconds(angleToPulseWidth(45));
+
   server.begin();
 }
 
@@ -47,6 +57,15 @@ void loop() {
 
   if (client) {
     Serial.println("New Client Connected");
+      xServo.writeMicroseconds(angleToPulseWidth(90));
+      delay(400);
+      xServo.writeMicroseconds(angleToPulseWidth(180));
+      delay(400);
+      xServo.writeMicroseconds(angleToPulseWidth(135));
+      yServo.writeMicroseconds(angleToPulseWidth(0));
+      delay(600);
+      yServo.writeMicroseconds(angleToPulseWidth(45));
+
 
     String request = "";
 
@@ -59,8 +78,15 @@ void loop() {
           Serial.print("Received: ");
           Serial.println(request);
 
-          // Parse positions from the request
-          parseAndSetPositions(request, client);
+          if (request.startsWith("x=") || request.startsWith("y=")) {
+            // Parse positions from the request
+            parseAndSetPositions(request, client);
+          } else if (request.startsWith("solenoid=")) {
+            // Handle solenoid command
+            handleSolenoidCommand(request, client);
+          } else {
+            client.println("Invalid command format.");
+          }
 
           // Clear the request string for the next message
           request = "";
@@ -102,7 +128,7 @@ void parseAndSetPositions(String request, WiFiClient& client) {
 
     // Constrain values to servo limits
     xPos = constrain(xValue, 0, 270);
-    yPos = constrain(yValue, 0, 270);
+    yPos = constrain(yValue, 0, 90);
 
     // Calculate pulse widths
     int xPulseWidth = angleToPulseWidth(xPos);
@@ -122,5 +148,25 @@ void parseAndSetPositions(String request, WiFiClient& client) {
     client.println("Servos moved to positions: x=" + String(xPos) + ", y=" + String(yPos));
   } else {
     client.println("Invalid command format. Expected: x=<value>&y=<value>");
+  }
+}
+
+void handleSolenoidCommand(String command, WiFiClient& client) {
+  if (command == "solenoid=toggle") {
+    static bool solenoidState = false;
+    solenoidState = !solenoidState;
+    digitalWrite(solenoidPin, solenoidState ? HIGH : LOW);
+    client.println("Solenoid toggled " + String(solenoidState ? "ON" : "OFF"));
+    Serial.println("Solenoid toggled " + String(solenoidState ? "ON" : "OFF"));
+  } else if (command == "solenoid=on") {
+    digitalWrite(solenoidPin, HIGH);
+    client.println("Solenoid turned ON");
+    Serial.println("Solenoid turned ON");
+  } else if (command == "solenoid=off") {
+    digitalWrite(solenoidPin, LOW);
+    client.println("Solenoid turned OFF");
+    Serial.println("Solenoid turned OFF");
+  } else {
+    client.println("Invalid solenoid command");
   }
 }
