@@ -4,8 +4,8 @@ import curses
 
 def main(stdscr):
     # Initialize connection parameters
-    arduino_ip = "192.168.50.30"  # Replace with your Arduino's IP address
-    arduino_port = 80             # Replace with the correct port if different
+    arduino_ip = "192.168.50.30"
+    arduino_port = 80
 
     # Create a socket object
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -36,51 +36,54 @@ def main(stdscr):
     x_pos, x_min, x_max = 135, 0, 270
     y_pos, y_min, y_max = 0, 0, 75
 
-    step_size = 5
+    step_size = 10
+
+    # Function to update position and send command
+    def update_position(new_x, new_y, action_name):
+        nonlocal x_pos, y_pos
+        x_pos = max(x_min, min(x_max, new_x))
+        y_pos = max(y_min, min(y_max, new_y))
+        send_command(f"x={x_pos}&y={y_pos}")
+        stdscr.addstr(2, 0, f"Sent command: {action_name} (x={x_pos}, y={y_pos})   ")
+        stdscr.clrtoeol()
+
+    def toggle_solenoid():
+        send_command("solenoid=toggle")
+        stdscr.addstr(2, 0, "Sent command: TOGGLE SOLENOID       ")
+        stdscr.clrtoeol()
+
+    # Action dictionary mapping keys to functions
+    actions = {
+        curses.KEY_UP: lambda: update_position(x_pos, y_pos + step_size, "UP"),
+        curses.KEY_DOWN: lambda: update_position(x_pos, y_pos - step_size, "DOWN"),
+        curses.KEY_LEFT: lambda: update_position(x_pos + step_size, y_pos, "LEFT"),
+        curses.KEY_RIGHT: lambda: update_position(x_pos - step_size, y_pos, "RIGHT"),
+        ord('q'): lambda: update_position(225, 45, "UP-LEFT"),
+        ord('e'): lambda: update_position(45, 45, "UP-RIGHT"),
+        ord('w'): lambda: update_position(135, 45, "UP-CENTER"),
+        ord('a'): lambda: update_position(225, 0, "DOWN-LEFT"),
+        ord('d'): lambda: update_position(45, 0, "DOWN-RIGHT"),
+        ord('s'): lambda: update_position(135, 0, "DOWN-CENTER"),
+        ord(' '): toggle_solenoid,
+        ord('x'): "EXIT",  # Special case for exiting the loop
+
+    }
+
+    # Main loop
     while True:
         key = stdscr.getch()
-        if key == curses.KEY_UP:
-            y_pos = min(y_max, y_pos + step_size)
-            send_command(f"x={x_pos}&y={y_pos}")
-            stdscr.addstr(2, 0, f"Sent command: UP (x={x_pos}, y={y_pos})  ")
-        elif key == curses.KEY_DOWN:
-            y_pos = max(y_min, y_pos - step_size)
-            send_command(f"x={x_pos}&y={y_pos}")
-            stdscr.addstr(2, 0, f"Sent command: DOWN (x={x_pos}, y={y_pos})")
-        elif key == curses.KEY_LEFT:
-            x_pos = min(x_max, x_pos + step_size)
-            send_command(f"x={x_pos}&y={y_pos}")
-            stdscr.addstr(2, 0, f"Sent command: LEFT (x={x_pos}, y={y_pos})")
-        elif key == curses.KEY_RIGHT:
-            x_pos = max(x_min, x_pos - step_size)
-            send_command(f"x={x_pos}&y={y_pos}")
-            stdscr.addstr(2, 0, f"Sent command: RIGHT (x={x_pos}, y={y_pos})")
-        elif key == ord('q'):
-            x_pos, y_pos = 225, 45
-            send_command(f"x={x_pos}&y={y_pos}")
-            stdscr.addstr(2, 0, f"Sent command: UP-LEFT (x={x_pos}, y={y_pos})")
-        elif key == ord('e'):
-            x_pos, y_pos = 45, 45
-            send_command(f"x={x_pos}&y={y_pos}")
-            stdscr.addstr(2, 0, f"Sent command: UP-RIGHT (x={x_pos}, y={y_pos})")
-        elif key == ord('a'):
-            x_pos, y_pos = 225, 0
-            send_command(f"x={x_pos}&y={y_pos}")
-            stdscr.addstr(2, 0, f"Sent command: DOWN-LEFT (x={x_pos}, y={y_pos})")
-        elif key == ord('d'):
-            x_pos, y_pos = 45, 0
-            send_command(f"x={x_pos}&y={y_pos}")
-            stdscr.addstr(2, 0, f"Sent command: DOWN-RIGHT (x={x_pos}, y={y_pos})")
-        elif key == ord('s'):
-            x_pos, y_pos = 135, 0
-            send_command(f"x={x_pos}&y={y_pos}")
-            stdscr.addstr(2, 0, f"Sent command: RESET (x={x_pos}, y={y_pos}) ")
-        elif key == ord('q'):
-            break
+        if key != -1:
+            action = actions.get(key)
+            if action:
+                if action == "EXIT":
+                    break  # Exit the program
+                else:
+                    action()  # Execute the associated action
+            else:
+                stdscr.addstr(3, 0, f"Unmapped key pressed: {key}   ")
+                stdscr.clrtoeol()
 
-        stdscr.refresh()
-
-    client_socket.close()
+            stdscr.refresh()
 
 
 curses.wrapper(main)
