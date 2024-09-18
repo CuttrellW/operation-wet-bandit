@@ -35,7 +35,12 @@ class ArduinoController:
             try:
                 self.client_socket.sendall((command + "\n").encode("utf-8"))
             except Exception as e:
-                zs
+                print(f"Error sending command: {e}")
+
+    def increment_position(self, x_delta, y_delta, action_name="Manual Positioning"):
+        new_x = self.x_pos + x_delta
+        new_y = self.y_pos + y_delta
+        self.update_position(new_x, new_y, action_name)
 
     def update_position(self, new_x, new_y, action_name, spoof=False):
         self.x_pos = max(self.x_min, min(self.x_max, new_x))
