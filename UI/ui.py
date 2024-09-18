@@ -122,41 +122,48 @@ class VideoStreamApp:
                     self.arduino_controller.x_pos,
                     self.arduino_controller.y_pos - self.arduino_controller.step_size,
                     "UP",
-                ),
+                )
+                or self.settings_text.insert(tk.END, "Moved UP\n"),
                 "Down": lambda: self.arduino_controller.update_position(
                     self.arduino_controller.x_pos,
                     self.arduino_controller.y_pos + self.arduino_controller.step_size,
                     "DOWN",
-                ),
+                )
+                or self.settings_text.insert(tk.END, "Moved DOWN\n"),
                 "Left": lambda: self.arduino_controller.update_position(
                     self.arduino_controller.x_pos - self.arduino_controller.step_size,
                     self.arduino_controller.y_pos,
                     "LEFT",
-                ),
+                )
+                or self.settings_text.insert(tk.END, "Moved LEFT\n"),
                 "Right": lambda: self.arduino_controller.update_position(
                     self.arduino_controller.x_pos + self.arduino_controller.step_size,
                     self.arduino_controller.y_pos,
                     "RIGHT",
-                ),
-                "q": lambda: self.arduino_controller.update_position(
-                    225, 45, "UP-LEFT"
-                ),
-                "e": lambda: self.arduino_controller.update_position(
-                    45, 45, "UP-RIGHT"
-                ),
+                )
+                or self.settings_text.insert(tk.END, "Moved RIGHT\n"),
+                "q": lambda: self.arduino_controller.update_position(225, 45, "UP-LEFT")
+                or self.settings_text.insert(tk.END, "Moved UP-LEFT\n"),
+                "e": lambda: self.arduino_controller.update_position(45, 45, "UP-RIGHT")
+                or self.settings_text.insert(tk.END, "Moved UP-RIGHT\n"),
                 "w": lambda: self.arduino_controller.update_position(
                     135, 45, "UP-CENTER"
-                ),
+                )
+                or self.settings_text.insert(tk.END, "Moved UP-CENTER\n"),
                 "a": lambda: self.arduino_controller.update_position(
                     225, 0, "DOWN-LEFT"
-                ),
+                )
+                or self.settings_text.insert(tk.END, "Moved DOWN-LEFT\n"),
                 "d": lambda: self.arduino_controller.update_position(
                     45, 0, "DOWN-RIGHT"
-                ),
+                )
+                or self.settings_text.insert(tk.END, "Moved DOWN-RIGHT\n"),
                 "s": lambda: self.arduino_controller.update_position(
                     135, 0, "DOWN-CENTER"
-                ),
-                "space": self.arduino_controller.toggle_solenoid,
+                )
+                or self.settings_text.insert(tk.END, "Moved DOWN-CENTER\n"),
+                "space": lambda: self.arduino_controller.toggle_solenoid()
+                or self.settings_text.insert(tk.END, "Toggled Solenoid\n"),
             }
 
             action = actions.get(event.keysym)
@@ -164,6 +171,9 @@ class VideoStreamApp:
                 action()
             else:
                 print(f"Unmapped key pressed: {event.keysym}")
+                self.settings_text.insert(
+                    tk.END, f"Unmapped key pressed: {event.keysym}\n"
+                )
 
         self.settings_text.see(tk.END)
 
