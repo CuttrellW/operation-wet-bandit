@@ -1,5 +1,6 @@
 import tkinter as tk
 
+import command_ui
 import cv2
 import targeting  # Ensure this import is correct
 from PIL import Image, ImageTk
@@ -8,7 +9,14 @@ from targeting import calibrate, calibrate_x_axis
 
 class VideoStreamApp:
     def __init__(self, root):
+        # initialize the command ui
+        self.spoof_arduino = True
+        print("Initializing Arduino Controller")
+        self.arduino_controller = command_ui.ArduinoController(spoof=self.spoof_arduino)
+        self.arduino_controller.connect()
+
         self.calibrating = False  # Add a flag to track calibration state
+        self.manual_control = False  # Add a flag to track manual control mode
         self.root = root
         self.root.title("Video Stream with Mouse Tracking")
 
@@ -37,8 +45,15 @@ class VideoStreamApp:
         self.settings_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
         # Create a text box to display the settings and readout
-        self.settings_text = tk.Text(self.settings_frame, height=10, width=30)
+        self.settings_text = tk.Text(self.settings_frame, height=20, width=40)
         self.settings_text.pack()
+
+        # Add a scrollbar to the settings_text
+        self.scrollbar = tk.Scrollbar(
+            self.settings_frame, command=self.settings_text.yview
+        )
+        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.settings_text.config(yscrollcommand=self.scrollbar.set)
 
         # Create labels to display the coordinates
         self.coord_label = tk.Label(self.settings_frame, text="Coordinates: (0, 0)")
@@ -47,15 +62,15 @@ class VideoStreamApp:
         # Create buttons for settings
         self.button1 = tk.Button(
             self.settings_frame,
-            text="Setting 1",
-            command=lambda: self.target("Setting 1"),
+            text="Manual Control Mode",
+            command=self.toggle_manual_control,
         )
         self.button1.pack()
 
         self.button2 = tk.Button(
             self.settings_frame,
             text="Setting 2",
-            command=lambda: self.target("Setting 2"),
+            command=self.print_servo_positions,
         )
         self.button2.pack()
 
@@ -88,6 +103,48 @@ class VideoStreamApp:
         # Variable to track Enter key press
         self.enter_pressed = tk.BooleanVar()
 
+        # Bind keyboard events for manual control
+        self.root.bind("<KeyPress>", self.key_press)
+        self.root.bind("<KeyRelease>", self.key_release)
+
+    def toggle_manual_control(self):
+        self.manual_control = not self.manual_control
+        if self.manual_control:
+            self.settings_text.insert(tk.END, "Manual Control Mode: ON\n")
+        else:
+            self.settings_text.insert(tk.END, "Manual Control Mode: OFF\n")
+        self.settings_text.see(tk.END)  # Scroll to the end
+
+    def key_press(self, event):
+        if self.manual_control:
+            if event.keysym == "Up":
+                self.update_servo_position(0, -10)
+            elif event.keysym == "Down":
+                self.update_servo_position(0, 10)
+            elif event.keysym == "Left":
+                self.update_servo_position(-10, 0)
+            elif event.keysym == "Right":
+                self.update_servo_position(10, 0)
+
+    def key_release(self, event):
+        pass  # Add any necessary key release handling here
+
+    def update_servo_position(self, delta_x, delta_y):
+        # Update servo positions based on delta_x and delta_y
+        # This is a placeholder implementation
+        print(f"Updating servo position by ({delta_x}, {delta_y})")
+        new_x = self.arduino_controller.x_pos + delta_x
+        new_y = self.arduino_controller.y_pos + delta_y
+        self.arduino_controller.update_position(new_x, new_y, "Manual Control")
+        self.settings_text.insert(
+            tk.END, f"Servo position updated by ({delta_x}, {delta_y})\n"
+        )
+        print(f"Servo position updated by ({delta_x}, {delta_y})")
+        print(
+            f"New servo position: ({self.arduino_controller.x_pos}, {self.arduino_controller.y_pos})"
+        )
+        self.settings_text.see(tk.END)  # Scroll to the end
+
     def start_calibration(self):
         self.calibrating = True  # Set the flag to True when calibration starts
         self.root.update_idletasks()  # Ensure the UI updates immediately
@@ -97,15 +154,20 @@ class VideoStreamApp:
         # self.calibrating = False  # Reset the flag after calibration ends
 
     def get_servo_positions(self):
-        # Dummy implementation for example purposes
-        return (0, 0)
+        # Return the current servo positions
+        return (self.arduino_controller.x_pos, self.arduino_controller.y_pos)
+
+    def print_servo_positions(self):
+        x, y = self.get_servo_positions()
+        self.settings_text.insert(tk.END, f"Servo positions: x={x}, y={y}\n")
+        print(f"Servo positions: x={x}, y={y}")
+        self.settings_text.see(tk.END)  # Scroll to the end
 
     def on_enter_pressed(self, event):
         self.enter_pressed.set(True)
 
     def update_video(self):
         if not self.calibrating:  # Only update video if not calibrating
-            print(self.calibrating)
             ret, frame = self.cap.read()
             if ret:
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -162,10 +224,12 @@ class VideoStreamApp:
         # Print the coordinates to the settings_text
         self.settings_text.insert(tk.END, f"Mouse clicked at: ({x}, {y})\n")
         print(f"Mouse clicked at ({x}, {y})")
+        self.settings_text.see(tk.END)  # Scroll to the end
 
     def target(self, setting):
         print(f"Button pressed: {setting}")
         self.settings_text.insert(tk.END, f"Button pressed: {setting}\n")
+        self.settings_text.see(tk.END)  # Scroll to the end
 
     def __del__(self):
         # Release the video capture when the app is closed
@@ -175,6 +239,7 @@ class VideoStreamApp:
 
 
 if __name__ == "__main__":
+    spoof_arduino = True
     root = tk.Tk()
     app = VideoStreamApp(root)
     root.bind("<Return>", app.on_enter_pressed)

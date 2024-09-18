@@ -1,6 +1,8 @@
 import curses
 import socket
 
+import command_ui
+
 
 def main(stdscr):
     # Initialize connection parameters
