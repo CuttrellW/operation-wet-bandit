@@ -1,12 +1,14 @@
 import tkinter as tk
 
 import cv2
-import targeting
+import targeting  # Ensure this import is correct
 from PIL import Image, ImageTk
+from targeting import calibrate, calibrate_x_axis
 
 
 class VideoStreamApp:
     def __init__(self, root):
+        self.calibrating = False  # Add a flag to track calibration state
         self.root = root
         self.root.title("Video Stream with Mouse Tracking")
 
@@ -18,9 +20,17 @@ class VideoStreamApp:
         self.video_frame = tk.Frame(self.main_frame)
         self.video_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        # Create a label to display the video stream
-        self.video_label = tk.Label(self.video_frame, bg="green")
-        self.video_label.pack(fill=tk.BOTH, expand=True)
+        # Create a canvas to display the video stream
+        self.video_canvas = tk.Canvas(self.video_frame)
+        self.video_canvas.pack(fill=tk.BOTH, expand=True)
+
+        # Center the video and have it fill the canvas
+        self.video_canvas.update_idletasks()
+        canvas_width = self.video_canvas.winfo_width()
+        canvas_height = self.video_canvas.winfo_height()
+        self.video_canvas.create_image(
+            canvas_width // 2, canvas_height // 2, anchor=tk.CENTER
+        )
 
         # Create a frame to hold the settings and readout on the right side
         self.settings_frame = tk.Frame(self.main_frame)
@@ -66,11 +76,11 @@ class VideoStreamApp:
         # Initialize video capture
         self.cap = cv2.VideoCapture(0)
 
-        # Bind mouse motion to the video label
-        self.video_label.bind("<Motion>", self.mouse_motion)
+        # Bind mouse motion to the video canvas
+        self.video_canvas.bind("<Motion>", self.mouse_motion)
 
-        # Bind mouse click to the video label
-        self.video_label.bind("<Button-1>", self.mouse_click)
+        # Bind mouse click to the video canvas
+        self.video_canvas.bind("<Button-1>", self.mouse_click)
 
         # Start the video loop
         self.update_video()
@@ -79,7 +89,12 @@ class VideoStreamApp:
         self.enter_pressed = tk.BooleanVar()
 
     def start_calibration(self):
-        targeting.calibrate(self)
+        self.calibrating = True  # Set the flag to True when calibration starts
+        self.root.update_idletasks()  # Ensure the UI updates immediately
+        calibrate_x_axis(
+            self
+        )  # Pass the instance of VideoStreamApp to the calibrate function
+        # self.calibrating = False  # Reset the flag after calibration ends
 
     def get_servo_positions(self):
         # Dummy implementation for example purposes
@@ -89,15 +104,47 @@ class VideoStreamApp:
         self.enter_pressed.set(True)
 
     def update_video(self):
-        # Placeholder for video stream
-        self.video_label.configure(bg="green")
-        # Call this function again after 10ms
-        self.root.after(10, self.update_video)
+        if not self.calibrating:  # Only update video if not calibrating
+            print(self.calibrating)
+            ret, frame = self.cap.read()
+            if ret:
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                img = Image.fromarray(frame)
+
+                # Resize the image to fit the canvas while keeping the aspect ratio
+                canvas_width = self.video_canvas.winfo_width()
+                canvas_height = self.video_canvas.winfo_height()
+
+                if (
+                    canvas_width > 0 and canvas_height > 0
+                ):  # Ensure width and height are > 0
+                    img_ratio = img.width / img.height
+                    canvas_ratio = canvas_width / canvas_height
+
+                    if img_ratio > canvas_ratio:
+                        new_width = canvas_width
+                        new_height = int(canvas_width / img_ratio)
+                    else:
+                        new_height = canvas_height
+                        new_width = int(canvas_height * img_ratio)
+
+                    img = img.resize((new_width, new_height), Image.LANCZOS)
+
+                    imgtk = ImageTk.PhotoImage(image=img)
+                    self.video_canvas.imgtk = imgtk
+                    self.video_canvas.update_idletasks()
+                    self.video_canvas.create_image(
+                        canvas_width // 2,
+                        canvas_height // 2,
+                        anchor=tk.CENTER,
+                        image=imgtk,
+                    )
+        self.root.after(50, self.update_video)
 
     def mouse_motion(self, event):
-        # Get the size of the video label
-        width = self.video_label.winfo_width()
-        height = self.video_label.winfo_height()
+        # Get the size of the video canvas
+        width = self.video_canvas.winfo_width()
+        height = self.video_canvas.winfo_height()
         # Calculate the coordinates as a scale of 0-100
         x = int((event.x / width) * 100)
         y = int((event.y / height) * 100)
@@ -106,9 +153,9 @@ class VideoStreamApp:
         # print(f"Mouse moved to ({x}, {y})")
 
     def mouse_click(self, event):
-        # Get the size of the video label
-        width = self.video_label.winfo_width()
-        height = self.video_label.winfo_height()
+        # Get the size of the video canvas
+        width = self.video_canvas.winfo_width()
+        height = self.video_canvas.winfo_height()
         # Calculate the coordinates as a scale of 0-100
         x = int((event.x / width) * 100)
         y = int((event.y / height) * 100)

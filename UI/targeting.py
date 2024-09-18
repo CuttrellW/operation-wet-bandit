@@ -24,7 +24,7 @@ def map_to_servo(top_left, bottom_right):
     if not calibration_mesh:
         try:
             # Load the calibration mesh from the JSON file
-            with open("calibration_mesh.json", "r") as f:
+            with open("UI/calibration_mesh.json", "r") as f:
                 calibration_mesh = json.load(f)
         except FileNotFoundError:
             print("Error: calibration_mesh.json file not found.")
@@ -38,30 +38,81 @@ def map_to_servo(top_left, bottom_right):
     center_y = (top_left[1] + bottom_right[1]) / 2
 
     try:
-        # Extract points and values from the calibration mesh
-        points = np.array(
-            [list(map(float, k.split(","))) for k in calibration_mesh.keys()]
-        )
-        values = np.array(list(calibration_mesh.values()), dtype=float)
+        # Extract x and y points and corresponding servo values from the calibration mesh
+        x_points = np.array([float(k.split(",")[0]) for k in calibration_mesh.keys()])
+        y_points = np.array([float(k.split(",")[1]) for k in calibration_mesh.keys()])
+        servo_x_values = np.array([v[0] for v in calibration_mesh.values()])
+        servo_y_values = np.array([v[1] for v in calibration_mesh.values()])
 
-        # Interpolate the servo positions
-        servo_x, servo_y = griddata(
-            points, values, (center_x, center_y), method="linear"
-        )
-
-        # If interpolation fails (e.g., point outside convex hull), fall back to the closest point
-        if np.isnan(servo_x) or np.isnan(servo_y):
-            closest_point = min(
-                calibration_mesh.keys(),
-                key=lambda k: (float(k.split(",")[0]) - center_x) ** 2
-                + (float(k.split(",")[1]) - center_y) ** 2,
-            )
-            servo_x, servo_y = calibration_mesh[closest_point]
+        # Perform linear interpolation on the x-axis
+        servo_x = np.interp(center_x, x_points, servo_x_values)
+        # Perform linear interpolation on the y-axis
+        servo_y = np.interp(center_y, y_points, servo_y_values)
     except Exception as e:
         print(f"Error during interpolation: {e}")
         return None, None
 
     return servo_x, servo_y
+
+
+def calibrate_x_axis(app):
+    """
+    Calibrates the x-axis by allowing the user to click on targets in the image and set the servo_x position.
+
+    Args:
+        app (VideoStreamApp): The instance of the VideoStreamApp to calibrate.
+    """
+    app.calibrating = True
+    calibration_mesh = {}
+    app.settings_text.insert(
+        tk.END,
+        "Click on a target to start calibration. Complete all steps to finish.\n",
+    )
+
+    def on_mouse_click(event):
+        print("mouse clicked")
+        # Get the size of the video canvas
+        width = app.video_canvas.winfo_width()
+        height = app.video_canvas.winfo_height()
+        # Calculate the coordinates as a scale of 0-100
+        x = int((event.x / width) * 100)
+        y = int((event.y / height) * 100)
+        # Draw a red plus sign at the clicked position
+        plus_sign = [
+            app.video_canvas.create_line(
+                event.x - 10, event.y, event.x + 10, event.y, fill="red", width=3
+            ),
+            app.video_canvas.create_line(
+                event.x, event.y - 10, event.x, event.y + 10, fill="red", width=3
+            ),
+        ]
+        app.root.update()
+        app.settings_text.insert(
+            tk.END, f"Align servo_x to ({x}, {y}) and press Enter...\n"
+        )
+        app.enter_pressed.set(False)  # Reset the variable before waiting
+        app.root.wait_variable(app.enter_pressed)
+        servo_x, _ = app.get_servo_positions()
+        calibration_mesh[f"{x},{y}"] = (servo_x, 1.1)  # Only calibrating x-axis
+
+        # Remove the plus sign after calibration step
+        for item in plus_sign:
+            app.video_canvas.delete(item)
+
+    # Run the calibration process 10 times
+    for _ in range(10):
+        app.video_canvas.bind("<Button-1>", on_mouse_click)
+        app.settings_text.insert(tk.END, "Click on the next target...\n")
+        app.root.wait_variable(app.enter_pressed)
+
+    # Save the calibration mesh to a file
+    try:
+        with open("UI/calibration_mesh.json", "w") as f:
+            json.dump(calibration_mesh, f)
+        app.settings_text.insert(tk.END, "Calibration complete and saved.\n")
+    except Exception as e:
+        app.settings_text.insert(tk.END, f"Error saving calibration mesh: {e}\n")
+    app.calibrating = False
 
 
 def calibrate(app):
@@ -73,33 +124,34 @@ def calibrate(app):
     Args:
         app (VideoStreamApp): The instance of the VideoStreamApp to calibrate.
     """
-    global calibration_mesh
     calibration_mesh = {}
-    width = app.video_label.winfo_width()
-    height = app.video_label.winfo_height()
+    width = app.video_canvas.winfo_width()
+    height = app.video_canvas.winfo_height()
+
+    margin_x = int(0.1 * width)
+    margin_y = int(0.1 * height)
 
     for i in range(3):
         for j in range(10):
-            x = int(j * width / 9)
-            y = int(i * height / 2)
-            # Create a red plus sign using a Canvas widget
-            canvas = tk.Canvas(app.video_label, width=width, height=height)
-            canvas.place(x=0, y=0)
-            canvas.create_line(x - 5, y, x + 5, y, fill="red")
-            canvas.create_line(x, y - 5, x, y + 5, fill="red")
+            x = int(j * (width - 2 * margin_x) / 9) + margin_x
+            y = int(i * (height - 2 * margin_y) / 2) + margin_y
+            # Draw a larger and thicker red plus sign directly on the existing Canvas widget
+            plus_sign = [
+                app.video_canvas.create_line(x - 10, y, x + 10, y, fill="red", width=3),
+                app.video_canvas.create_line(x, y - 10, x, y + 10, fill="red", width=3),
+            ]
             app.root.update()
             app.settings_text.insert(
                 tk.END, f"Align laser to ({x}, {y}) and press Enter...\n"
             )
+            app.enter_pressed.set(False)  # Reset the variable before waiting
             app.root.wait_variable(app.enter_pressed)
-            print("enter pressed")
-            # reset the variable
-            app.enter_pressed.set(False)
             servo_x, servo_y = app.get_servo_positions()
             calibration_mesh[f"{x},{y}"] = (servo_x, servo_y)
 
-            canvas.delete("all")
-            canvas.destroy()
+            # Remove the plus sign after calibration step
+            for item in plus_sign:
+                app.video_canvas.delete(item)
 
     app.calibration_mesh = calibration_mesh
     app.settings_text.insert(tk.END, "Calibration complete.\n")

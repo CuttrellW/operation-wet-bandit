@@ -1,5 +1,5 @@
-import socket
 import curses
+import socket
 
 
 def main(stdscr):
@@ -13,7 +13,9 @@ def main(stdscr):
     # Connect to the Arduino
     try:
         client_socket.connect((arduino_ip, arduino_port))
-        stdscr.addstr(0, 0, "Connected to Arduino at {}:{}".format(arduino_ip, arduino_port))
+        stdscr.addstr(
+            0, 0, "Connected to Arduino at {}:{}".format(arduino_ip, arduino_port)
+        )
     except Exception as e:
         stdscr.addstr(0, 0, f"Error connecting to Arduino: {e}")
         stdscr.refresh()
@@ -24,7 +26,7 @@ def main(stdscr):
     def send_command(command):
         try:
             # Add newline character as Arduino expects
-            client_socket.sendall((command + '\n').encode('utf-8'))
+            client_socket.sendall((command + "\n").encode("utf-8"))
         except Exception as e:
             stdscr.addstr(1, 0, f"Error sending command: {e}")
             stdscr.refresh()
@@ -58,15 +60,14 @@ def main(stdscr):
         curses.KEY_DOWN: lambda: update_position(x_pos, y_pos - step_size, "DOWN"),
         curses.KEY_LEFT: lambda: update_position(x_pos + step_size, y_pos, "LEFT"),
         curses.KEY_RIGHT: lambda: update_position(x_pos - step_size, y_pos, "RIGHT"),
-        ord('q'): lambda: update_position(225, 45, "UP-LEFT"),
-        ord('e'): lambda: update_position(45, 45, "UP-RIGHT"),
-        ord('w'): lambda: update_position(135, 45, "UP-CENTER"),
-        ord('a'): lambda: update_position(225, 0, "DOWN-LEFT"),
-        ord('d'): lambda: update_position(45, 0, "DOWN-RIGHT"),
-        ord('s'): lambda: update_position(135, 0, "DOWN-CENTER"),
-        ord(' '): toggle_solenoid,
-        ord('x'): "EXIT",  # Special case for exiting the loop
-
+        ord("q"): lambda: update_position(225, 45, "UP-LEFT"),
+        ord("e"): lambda: update_position(45, 45, "UP-RIGHT"),
+        ord("w"): lambda: update_position(135, 45, "UP-CENTER"),
+        ord("a"): lambda: update_position(225, 0, "DOWN-LEFT"),
+        ord("d"): lambda: update_position(45, 0, "DOWN-RIGHT"),
+        ord("s"): lambda: update_position(135, 0, "DOWN-CENTER"),
+        ord(" "): toggle_solenoid,
+        ord("x"): "EXIT",  # Special case for exiting the loop
     }
 
     # Main loop
