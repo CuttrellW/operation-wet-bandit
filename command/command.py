@@ -87,4 +87,5 @@ def main(stdscr):
             stdscr.refresh()
 
 
-curses.wrapper(main)
+if __name__ == "__main__":
+    curses.wrapper(main)
