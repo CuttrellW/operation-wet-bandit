@@ -4,13 +4,14 @@ import command_ui
 import cv2
 import targeting  # Ensure this import is correct
 from PIL import Image, ImageTk
-from targeting import calibrate, calibrate_x_axis
+from targeting import calibrate, calibrate_x_axis, calibrate_x_point
 
 
 class VideoStreamApp:
     def __init__(self, root):
+        self.calibration_points = 3  # Set the number of calibration points
         # initialize the command ui
-        self.spoof_arduino = True
+        self.spoof_arduino = False
         print("Initializing Arduino Controller")
         self.arduino_controller = command_ui.ArduinoController(spoof=self.spoof_arduino)
         self.arduino_controller.connect()
@@ -69,8 +70,8 @@ class VideoStreamApp:
 
         self.button2 = tk.Button(
             self.settings_frame,
-            text="Setting 2",
-            command=self.print_servo_positions,
+            text="Calibrate X Point",
+            command=calibrate_x_point(self),
         )
         self.button2.pack()
 
