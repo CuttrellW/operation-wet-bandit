@@ -10,7 +10,7 @@ from targeting import calibrate, calibrate_x_axis
 class VideoStreamApp:
     def __init__(self, root):
         # initialize the command ui
-        self.spoof_arduino = True
+        self.spoof_arduino = False
         print("Initializing Arduino Controller")
         self.arduino_controller = command_ui.ArduinoController(spoof=self.spoof_arduino)
         self.arduino_controller.connect()
