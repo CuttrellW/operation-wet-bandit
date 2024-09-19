@@ -7,8 +7,8 @@ class ArduinoController:
         self.arduino_ip = ip
         self.arduino_port = port
         self.x_pos, self.x_min, self.x_max = 135, 0, 270
-        self.y_pos, self.y_min, self.y_max = 0, 0, 75
-        self.step_size = 10
+        self.y_pos, self.y_min, self.y_max = 30, 0, 75
+        self.step_size = 5
         if spoof:
             print("Spoofing Arduino Controller")
         else:

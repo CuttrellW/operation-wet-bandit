@@ -1,16 +1,20 @@
+import json
+import socket
+
 import cv2
 import numpy as np
-import socket
-import json
+import targeting
 
 # Load class names for PASCAL VOC
 class_names = []
-with open("model_data/coco.names", "r") as f:
+with open("UI/model_data/coco.names", "r") as f:
     class_names = [line.strip() for line in f.readlines()]
 
 # Load the DNN model
-net = cv2.dnn.readNetFromCaffe('model_data/MobileNetSSD_deploy.prototxt',
-                               'model_data/MobileNetSSD_deploy.caffemodel')
+net = cv2.dnn.readNetFromCaffe(
+    "UI/model_data/MobileNetSSD_deploy.prototxt",
+    "UI/model_data/MobileNetSSD_deploy.caffemodel",
+)
 
 # Set preferable backend and target
 net.setPreferableBackend(cv2.dnn.DNN_BACKEND_DEFAULT)
@@ -22,6 +26,7 @@ person_class_id = 15  # For MobileNet SSD, 'person' class ID is 15
 # Global calibration mesh
 calibration_mesh = {}
 
+"""
 def map_to_servo_center(center_x, center_y):
     global calibration_mesh
 
@@ -53,10 +58,11 @@ def map_to_servo_center(center_x, center_y):
         return None, None
 
     return servo_x, servo_y
+"""
 
 # Arduino connection parameters
 arduino_ip = "192.168.50.30"  # Replace with your Arduino's IP address
-arduino_port = 80             # Replace with your Arduino's port if different
+arduino_port = 80  # Replace with your Arduino's port if different
 
 # Create a socket object
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -70,6 +76,7 @@ except Exception as e:
     client_socket.close()
     exit(1)
 
+
 # Function to send commands to Arduino
 def send_command(command):
     try:
@@ -77,6 +84,7 @@ def send_command(command):
         client_socket.sendall((command + "\n").encode("utf-8"))
     except Exception as e:
         print(f"Error sending command: {e}")
+
 
 cv2.namedWindow("preview")
 vc = cv2.VideoCapture(0)
@@ -99,11 +107,11 @@ while rval:
 
     for i in range(detections.shape[2]):
         confidence = detections[0, 0, i, 2]
-        if confidence > 0.5:
+        if confidence > 0.65:
             class_id = int(detections[0, 0, i, 1])
             if class_id == person_class_id:
                 box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
-                (startX, startY, endX, endY) = box.astype('int')
+                (startX, startY, endX, endY) = box.astype("int")
 
                 startX = max(0, min(startX, w - 1))
                 startY = max(0, min(startY, h - 1))
@@ -121,20 +129,26 @@ while rval:
                 scaled_centerX = max(0, min(scaled_centerX, 100))
                 scaled_centerY = max(0, min(scaled_centerY, 100))
 
-                servo_x, servo_y = map_to_servo_center(scaled_centerX, scaled_centerY)
+                servo_x = targeting.map_video_x_to_servo(scaled_centerX)
 
-                servo_x = 100 - servo_x
-                if servo_x is not None and servo_y is not None:
+                if servo_x is not None:
                     # Send servo positions to Arduino
-                    command = f"x={servo_x}&y={servo_y}"
+                    command = f"x={servo_x}&y=30"
                     send_command(command)
                     print(f"Sent command to Arduino: {command}")
 
                 label = f"{class_names[class_id]}: {confidence:.2f}"
                 cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 255, 0), 2)
                 cv2.circle(frame, (centerX, centerY), 5, (255, 0, 0), -1)
-                cv2.putText(frame, label, (startX, startY - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                cv2.putText(
+                    frame,
+                    label,
+                    (startX, startY - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (0, 255, 0),
+                    2,
+                )
                 # Break after processing one person (optional)
                 # break
 

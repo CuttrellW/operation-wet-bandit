@@ -7,8 +7,10 @@ with open("model_data/coco.names", "r") as f:
     class_names = [line.strip() for line in f.readlines()]
 
 # Load the DNN model
-net = cv2.dnn.readNetFromCaffe('model_data/MobileNetSSD_deploy.prototxt',
-                               'model_data/MobileNetSSD_deploy.caffemodel')
+net = cv2.dnn.readNetFromCaffe(
+    "model_data/MobileNetSSD_deploy.prototxt",
+    "model_data/MobileNetSSD_deploy.caffemodel",
+)
 
 # Set preferable backend and target to avoid potential issues
 net.setPreferableBackend(cv2.dnn.DNN_BACKEND_DEFAULT)
@@ -42,7 +44,7 @@ while rval:
             if class_id == person_class_id:
                 # Compute bounding box coordinates
                 box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
-                (startX, startY, endX, endY) = box.astype('int')
+                (startX, startY, endX, endY) = box.astype("int")
 
                 # Ensure coordinates are within the frame dimensions
                 startX = max(0, min(startX, w - 1))
@@ -58,8 +60,15 @@ while rval:
                 label = f"{class_names[class_id]}: {confidence:.2f}"
                 cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 255, 0), 2)
                 cv2.circle(frame, (centerX, centerY), 5, (255, 0, 0), -1)
-                cv2.putText(frame, label, (startX, startY - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                cv2.putText(
+                    frame,
+                    label,
+                    (startX, startY - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (0, 255, 0),
+                    2,
+                )
 
                 # Print the center x-coordinate
                 print(f"Center mass: X{centerX} Y{centerY}")

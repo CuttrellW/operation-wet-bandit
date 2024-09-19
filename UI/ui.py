@@ -1,6 +1,7 @@
 import json
 import tkinter as tk
 
+import auto_targeting_ui
 import command_ui
 import cv2
 import targeting  # Ensure this import is correct
@@ -11,6 +12,7 @@ from targeting import calibrate, calibrate_x_axis, calibrate_x_point
 class VideoStreamApp:
     def __init__(self, root):
         self.calibration_points = 3  # Set the number of calibration points
+        self.recticle_color = "green"  # Set the color of the recticle
         # initialize the command ui
         self.spoof_arduino = False
         print("Initializing Arduino Controller")
@@ -20,8 +22,9 @@ class VideoStreamApp:
         self.calibrating = False  # Add a flag to track calibration state
         self.manual_control = False  # Add a flag to track manual control mode
         self.mouse_control = False  # Add a flag to track mouse control mode
+        self.auto_targeting = False  # Initialize auto-targeting flag
         self.root = root
-        self.root.title("Video Stream with Mouse Tracking")
+        self.root.title("Video Stream with Mouse Tracking and Auto Targeting")
 
         # Create a main frame to hold the video and settings frames
         self.main_frame = tk.Frame(root)
@@ -65,30 +68,24 @@ class VideoStreamApp:
         # Create buttons for settings
         self.button1 = tk.Button(
             self.settings_frame,
-            text="Manual Control Mode",
+            text="Toggle Manual Control",
             command=self.toggle_manual_control,
         )
         self.button1.pack()
 
-        self.button2 = tk.Button(
-            self.settings_frame,
-            text="Calibrate X Point",
-            command=calibrate_x_point(self),
-        )
-        self.button2.pack()
         self.button3 = tk.Button(
             self.settings_frame,
-            text="Toggle Mouse Control",
+            text="Toggle Mouse Targeting",
             command=self.toggle_mouse_control,
         )
         self.button3.pack()
 
-        self.calibrate_button = tk.Button(
+        self.auto_target_button = tk.Button(
             self.settings_frame,
-            text="Calibrate",
-            command=self.start_calibration,
+            text="Toggle Auto Targeting",
+            command=self.toggle_auto_targeting,
         )
-        self.calibrate_button.pack()
+        self.auto_target_button.pack()
 
         # Initialize video capture
         self.cap = cv2.VideoCapture(0)
@@ -187,6 +184,31 @@ class VideoStreamApp:
                     tk.END, f"Unmapped key pressed: {event.keysym}\n"
                 )
 
+    def mouse_motion(self, event):
+        if self.mouse_control:
+            # Get the size of the video canvas
+            width = self.video_canvas.winfo_width()
+            height = self.video_canvas.winfo_height()
+            # Calculate the coordinates as a scale of 0-100
+            x = int((event.x / width) * 100)
+            y = int((event.y / height) * 100)
+            # Print the coordinates to the settings_text
+            self.settings_text.insert(tk.END, f"Mouse moved to: ({x}, {y})\n")
+            # target the servo to the mouse position
+            new_x = targeting.map_video_x_to_servo(x)
+            # new y will be a math function, mapping values from 50-30 to 0-30.
+            new_y = 30 - (y - 50) * 0.6
+
+            self.arduino_controller.update_position(new_x, new_y, "Mouse Control")
+            self.settings_text.see(tk.END)
+
+    def toggle_auto_targeting(self):
+        self.auto_targeting = not self.auto_targeting
+        if self.auto_targeting:
+            self.settings_text.insert(tk.END, "Auto Targeting: ON\n")
+            self.auto_targeter = auto_targeting_ui.AutoTargeter()
+        else:
+            self.settings_text.insert(tk.END, "Auto Targeting: OFF\n")
         self.settings_text.see(tk.END)
 
     def key_release(self, event):
@@ -223,14 +245,6 @@ class VideoStreamApp:
         )
         self.settings_text.see(tk.END)  # Scroll to the end
 
-    def start_calibration(self):
-        self.calibrating = True  # Set the flag to True when calibration starts
-        self.root.update_idletasks()  # Ensure the UI updates immediately
-        calibrate_x_axis(
-            self
-        )  # Pass the instance of VideoStreamApp to the calibrate function
-        # self.calibrating = False  # Reset the flag after calibration ends
-
     def get_servo_positions(self):
         # Return the current servo positions
         return (self.arduino_controller.x_pos, self.arduino_controller.y_pos)
@@ -244,81 +258,215 @@ class VideoStreamApp:
     def on_enter_pressed(self, event):
         self.enter_pressed.set(True)
 
-    def update_video(self):
-        if not self.calibrating:  # Only update video if not calibrating
-            ret, frame = self.cap.read()
-            if ret:
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                img = Image.fromarray(frame)
+    # Toggle recticle color function
+    def toggle_recticle_color(self):
+        if self.recticle_color == "green":
+            self.recticle_color = "red"
+        else:
+            self.recticle_color = "green"
+        # self.settings_text.insert(tk.END, "Toggled Recticle Color\n")
 
-                # Resize the image to fit the canvas while keeping the aspect ratio
-                canvas_width = self.video_canvas.winfo_width()
-                canvas_height = self.video_canvas.winfo_height()
+    def update_video(self, verbose=False):
+        ret, frame = self.cap.read()
+        if ret:
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            img = Image.fromarray(frame)
 
-                if (
-                    canvas_width > 0 and canvas_height > 0
-                ):  # Ensure width and height are > 0
-                    img_ratio = img.width / img.height
-                    canvas_ratio = canvas_width / canvas_height
+            # Resize the image to fit the canvas while keeping the aspect ratio
+            canvas_width = self.video_canvas.winfo_width()
+            canvas_height = self.video_canvas.winfo_height()
 
-                    if img_ratio > canvas_ratio:
-                        new_width = canvas_width
-                        new_height = int(canvas_width / img_ratio)
-                    else:
-                        new_height = canvas_height
-                        new_width = int(canvas_height * img_ratio)
+            if (
+                canvas_width > 0 and canvas_height > 0
+            ):  # Ensure width and height are > 0
+                img_ratio = img.width / img.height
+                canvas_ratio = canvas_width / canvas_height
 
-                    img = img.resize((new_width, new_height), Image.LANCZOS)
+                if img_ratio > canvas_ratio:
+                    new_width = canvas_width
+                    new_height = int(canvas_width / img_ratio)
+                else:
+                    new_height = canvas_height
+                    new_width = int(canvas_height * img_ratio)
 
-                    imgtk = ImageTk.PhotoImage(image=img)
-                    self.video_canvas.imgtk = imgtk
-                    self.video_canvas.update_idletasks()
-                    self.video_canvas.create_image(
-                        canvas_width // 2,
-                        canvas_height // 2,
-                        anchor=tk.CENTER,
-                        image=imgtk,
+                img = img.resize((new_width, new_height), Image.LANCZOS)
+
+                imgtk = ImageTk.PhotoImage(image=img)
+                self.video_canvas.imgtk = imgtk
+                self.video_canvas.update_idletasks()
+                self.video_canvas.create_image(
+                    canvas_width // 2,
+                    canvas_height // 2,
+                    anchor=tk.CENTER,
+                    image=imgtk,
+                )
+                if self.auto_targeting:
+                    self.root.bind(
+                        "<space>",
+                        lambda event: [
+                            self.arduino_controller.toggle_solenoid(),
+                            self.toggle_recticle_color(),
+                        ][1],
                     )
-                    if self.manual_control:
-                        # Draw a vertical red line mapped using map_servo_x_to_video_x. This line should only be drawn over the actual video feed, not the entire canvas.
-                        servo_x = self.arduino_controller.x_pos
-                        video_x = targeting.map_servo_x_to_video_x(servo_x)
-                        if video_x is not None:
-                            line_x = int((video_x / 100) * new_width)
-                            self.video_canvas.create_line(
-                                line_x,
-                                (canvas_height - new_height) // 2,
-                                line_x,
-                                (canvas_height + new_height) // 2,
-                                fill="red",
-                                width=2,
+
+                    # Auto-targeting logic
+                    person_x, crosshair_x, crosshair_y = (
+                        self.auto_targeter.process_image(frame)
+                    )
+                    if (
+                        person_x is not None
+                        and crosshair_x is not None
+                        and crosshair_y is not None
+                    ):
+
+                        # translate crosshair_x and crosshair_y to video coordinates
+                        crosshair_x = int((crosshair_x / 100) * canvas_width)
+                        crosshair_y = int((crosshair_y / 100) * canvas_height)
+
+                        self.arduino_controller.update_position(
+                            person_x, self.arduino_controller.y_pos, "Auto Targeting"
+                        )
+                        if verbose:
+                            self.settings_text.insert(
+                                tk.END,
+                                f"Auto-targeting updated position to x={person_x}\n",
                             )
+                        self.settings_text.see(tk.END)
+                        # Draw crosshair on the video canvas
+                        self.video_canvas.delete("crosshair")
+                        self.video_canvas.create_line(
+                            crosshair_x - 15,
+                            crosshair_y,
+                            crosshair_x - 5,
+                            crosshair_y,
+                            fill=self.recticle_color,
+                            width=3,
+                            tags="crosshair",
+                        )
+                        self.video_canvas.create_line(
+                            crosshair_x + 5,
+                            crosshair_y,
+                            crosshair_x + 15,
+                            crosshair_y,
+                            fill=self.recticle_color,
+                            width=3,
+                            tags="crosshair",
+                        )
+                        self.video_canvas.create_line(
+                            crosshair_x,
+                            crosshair_y - 15,
+                            crosshair_x,
+                            crosshair_y - 5,
+                            fill=self.recticle_color,
+                            width=3,
+                            tags="crosshair",
+                        )
+                        self.video_canvas.create_line(
+                            crosshair_x,
+                            crosshair_y + 5,
+                            crosshair_x,
+                            crosshair_y + 15,
+                            fill=self.recticle_color,
+                            width=3,
+                            tags="crosshair",
+                        )
 
+                elif self.manual_control:
+                    self.root.bind(
+                        "<Up>",
+                        lambda event: self.arduino_controller.update_position(
+                            self.arduino_controller.x_pos,
+                            self.arduino_controller.y_pos
+                            + self.arduino_controller.step_size,
+                            "UP",
+                        )
+                        or self.settings_text.insert(tk.END, "Moved UP\n"),
+                    )
+                    self.root.bind(
+                        "<Down>",
+                        lambda event: self.arduino_controller.update_position(
+                            self.arduino_controller.x_pos,
+                            self.arduino_controller.y_pos
+                            - self.arduino_controller.step_size,
+                            "DOWN",
+                        )
+                        or self.settings_text.insert(tk.END, "Moved DOWN\n"),
+                    )
+                    self.root.bind(
+                        "<Left>",
+                        lambda event: self.arduino_controller.update_position(
+                            self.arduino_controller.x_pos
+                            + self.arduino_controller.step_size,
+                            self.arduino_controller.y_pos,
+                            "LEFT",
+                        )
+                        or self.settings_text.insert(tk.END, "Moved LEFT\n"),
+                    )
+                    self.root.bind(
+                        "<Right>",
+                        lambda event: self.arduino_controller.update_position(
+                            self.arduino_controller.x_pos
+                            - self.arduino_controller.step_size,
+                            self.arduino_controller.y_pos,
+                            "RIGHT",
+                        )
+                        or self.settings_text.insert(tk.END, "Moved RIGHT\n"),
+                    )
+                    self.root.bind(
+                        "q",
+                        lambda event: self.arduino_controller.update_position(
+                            225, 45, "UP-LEFT"
+                        )
+                        or self.settings_text.insert(tk.END, "Moved UP-LEFT\n"),
+                    )
+                    self.root.bind(
+                        "e",
+                        lambda event: self.arduino_controller.update_position(
+                            45, 45, "UP-RIGHT"
+                        )
+                        or self.settings_text.insert(tk.END, "Moved UP-RIGHT\n"),
+                    )
+                    self.root.bind(
+                        "w",
+                        lambda event: self.arduino_controller.update_position(
+                            135, 45, "UP-CENTER"
+                        )
+                        or self.settings_text.insert(tk.END, "Moved UP-CENTER\n"),
+                    )
+                    self.root.bind(
+                        "a",
+                        lambda event: self.arduino_controller.update_position(
+                            225, 0, "DOWN-LEFT"
+                        )
+                        or self.settings_text.insert(tk.END, "Moved DOWN-LEFT\n"),
+                    )
+                    self.root.bind(
+                        "d",
+                        lambda event: self.arduino_controller.update_position(
+                            45, 0, "DOWN-RIGHT"
+                        )
+                        or self.settings_text.insert(tk.END, "Moved DOWN-RIGHT\n"),
+                    )
+                    self.root.bind(
+                        "s",
+                        lambda event: self.arduino_controller.update_position(
+                            135, 0, "DOWN-CENTER"
+                        )
+                        or self.settings_text.insert(tk.END, "Moved DOWN-CENTER\n"),
+                    )
+                    self.root.bind(
+                        "<space>",
+                        lambda event: (
+                            self.arduino_controller.toggle_solenoid()
+                            or self.settings_text.insert(tk.END, "Toggled Solenoid\n"),
+                            setattr(
+                                self,
+                                "recticle_color",
+                                "red" if self.recticle_color == "green" else "green",
+                            ),
+                        ),
+                    )
         self.root.after(50, self.update_video)
-
-    def mouse_motion(self, event):
-        # Get the size of the video canvas
-        width = self.video_canvas.winfo_width()
-        height = self.video_canvas.winfo_height()
-        # Calculate the coordinates as a scale of 0-100
-        x = int((event.x / width) * 100)
-        y = int((event.y / height) * 100)
-        # Update the coordinates label
-        self.coord_label.configure(text=f"Coordinates: ({x}, {y})")
-        if self.mouse_control:
-            # set the target servo_x position based on the mouse x position
-            servo_x = targeting.map_video_x_to_servo(x)
-            if servo_x is not None:
-                self.arduino_controller.update_position(
-                    servo_x, self.arduino_controller.y_pos, "Mouse Tracking"
-                )
-                self.settings_text.insert(
-                    tk.END, f"Servo position updated: x={servo_x}\n"
-                )
-                print(f"Servo position updated: x={servo_x}")
-                self.settings_text.see(tk.END)
-
-        # print(f"Mouse moved to ({x}, {y})")
 
     def mouse_click(self, event):
         # Get the size of the video canvas
@@ -330,11 +478,6 @@ class VideoStreamApp:
         # Print the coordinates to the settings_text
         self.settings_text.insert(tk.END, f"Mouse clicked at: ({x}, {y})\n")
         print(f"Mouse clicked at ({x}, {y})")
-        self.settings_text.see(tk.END)  # Scroll to the end
-
-    def target(self, setting):
-        print(f"Button pressed: {setting}")
-        self.settings_text.insert(tk.END, f"Button pressed: {setting}\n")
         self.settings_text.see(tk.END)  # Scroll to the end
 
     def __del__(self):
