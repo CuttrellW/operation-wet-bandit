@@ -94,6 +94,41 @@ def map_servo_x_to_video_x(servo_x):
     return x
 
 
+def calibrate_x_point(app):
+    def calibrate_x_point(app):
+        """
+        Waits for a user click to calibrate the current servo_x position with the clicked video_x position and saves it to the calibration mesh.
+
+        Args:
+            app (VideoStreamApp): The instance of the VideoStreamApp to calibrate.
+        """
+        app.calibrating = True
+        app.settings_text.insert(
+            tk.END,
+            "Click on the video stream where the servo is pointing. This will calibrate the current servo_x position.\n",
+        )
+
+        def on_mouse_click(event):
+            # Get the size of the video canvas
+            width = app.video_canvas.winfo_width()
+            height = app.video_canvas.winfo_height()
+            # Calculate the video_x as a scale of 0-100
+            video_x = int((event.x / width) * 100)
+            # Get the current servo_x position
+            servo_x = app.arduino_controller.x_pos
+            # Save the calibration point
+            app.calibration_mesh[f"{video_x}, 0"] = (servo_x, 30)
+            app.settings_text.insert(
+                tk.END, f"Calibrated video_x: {video_x} with servo_x: {servo_x}\n"
+            )
+            # Optionally, save the calibration mesh to a file
+            with open("UI/calibration_mesh.json", "w") as f:
+                json.dump(app.calibration_mesh, f)
+            app.calibrating = False
+
+        app.video_canvas.bind("<Button-1>", on_mouse_click)
+
+
 def calibrate_x_axis(app):
     """
     Calibrates the x-axis by allowing the user to click on targets in the image and set the servo_x position.
@@ -139,7 +174,7 @@ def calibrate_x_axis(app):
             app.video_canvas.delete(item)
 
     # Run the calibration process 10 times
-    for _ in range(10):
+    for _ in range(app.calibration_steps):
         app.video_canvas.bind("<Button-1>", on_mouse_click)
         app.settings_text.insert(tk.END, "Click on the next target...\n")
         app.root.wait_variable(app.enter_pressed)
