@@ -95,14 +95,23 @@ def map_servo_x_to_video_x(servo_x):
 
 
 def calibrate_x_point(app):
-    def calibrate_x_point(app):
+    def calibrate_x_point_inner(app):
         """
         Waits for a user click to calibrate the current servo_x position with the clicked video_x position and saves it to the calibration mesh.
+        Temporarily stops other processes to ensure calibration accuracy.
 
         Args:
             app (VideoStreamApp): The instance of the VideoStreamApp to calibrate.
         """
+        # Temporarily stop other processes
+        if app.calibrating or app.manual_control:
+            print("Another process is running. Please wait until it finishes.")
+            return
+
         app.calibrating = True
+        app.manual_control = (
+            False  # Ensure manual control is disabled during calibration
+        )
         app.settings_text.insert(
             tk.END,
             "Click on the video stream where the servo is pointing. This will calibrate the current servo_x position.\n",
@@ -125,8 +134,11 @@ def calibrate_x_point(app):
             with open("UI/calibration_mesh.json", "w") as f:
                 json.dump(app.calibration_mesh, f)
             app.calibrating = False
+            app.manual_control = True  # Re-enable manual control after calibration
 
         app.video_canvas.bind("<Button-1>", on_mouse_click)
+
+    calibrate_x_point_inner(app)
 
 
 def calibrate_x_axis(app):

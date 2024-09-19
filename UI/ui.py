@@ -1,3 +1,4 @@
+import json
 import tkinter as tk
 
 import command_ui
@@ -18,6 +19,7 @@ class VideoStreamApp:
 
         self.calibrating = False  # Add a flag to track calibration state
         self.manual_control = False  # Add a flag to track manual control mode
+        self.mouse_control = False  # Add a flag to track mouse control mode
         self.root = root
         self.root.title("Video Stream with Mouse Tracking")
 
@@ -74,11 +76,10 @@ class VideoStreamApp:
             command=calibrate_x_point(self),
         )
         self.button2.pack()
-
         self.button3 = tk.Button(
             self.settings_frame,
-            text="Setting 3",
-            command=lambda: self.target("Setting 3"),
+            text="Toggle Mouse Control",
+            command=self.toggle_mouse_control,
         )
         self.button3.pack()
 
@@ -116,29 +117,37 @@ class VideoStreamApp:
             self.settings_text.insert(tk.END, "Manual Control Mode: OFF\n")
         self.settings_text.see(tk.END)  # Scroll to the end
 
+    def toggle_mouse_control(self):
+        self.mouse_control = not self.mouse_control
+        if self.mouse_control:
+            self.settings_text.insert(tk.END, "Mouse Control Mode: ON\n")
+        else:
+            self.settings_text.insert(tk.END, "Mouse Control Mode: OFF\n")
+        self.settings_text.see(tk.END)
+
     def key_press(self, event):
         if self.manual_control:
             actions = {
                 "Up": lambda: self.arduino_controller.update_position(
                     self.arduino_controller.x_pos,
-                    self.arduino_controller.y_pos - self.arduino_controller.step_size,
+                    self.arduino_controller.y_pos + self.arduino_controller.step_size,
                     "UP",
                 )
                 or self.settings_text.insert(tk.END, "Moved UP\n"),
                 "Down": lambda: self.arduino_controller.update_position(
                     self.arduino_controller.x_pos,
-                    self.arduino_controller.y_pos + self.arduino_controller.step_size,
+                    self.arduino_controller.y_pos - self.arduino_controller.step_size,
                     "DOWN",
                 )
                 or self.settings_text.insert(tk.END, "Moved DOWN\n"),
                 "Left": lambda: self.arduino_controller.update_position(
-                    self.arduino_controller.x_pos - self.arduino_controller.step_size,
+                    self.arduino_controller.x_pos + self.arduino_controller.step_size,
                     self.arduino_controller.y_pos,
                     "LEFT",
                 )
                 or self.settings_text.insert(tk.END, "Moved LEFT\n"),
                 "Right": lambda: self.arduino_controller.update_position(
-                    self.arduino_controller.x_pos + self.arduino_controller.step_size,
+                    self.arduino_controller.x_pos - self.arduino_controller.step_size,
                     self.arduino_controller.y_pos,
                     "RIGHT",
                 )
@@ -165,6 +174,8 @@ class VideoStreamApp:
                 or self.settings_text.insert(tk.END, "Moved DOWN-CENTER\n"),
                 "space": lambda: self.arduino_controller.toggle_solenoid()
                 or self.settings_text.insert(tk.END, "Toggled Solenoid\n"),
+                "c": lambda: self.record_calibration_point(event)
+                or self.settings_text.insert(tk.END, "Recorded Calibration Point\n"),
             }
 
             action = actions.get(event.keysym)
@@ -180,6 +191,21 @@ class VideoStreamApp:
 
     def key_release(self, event):
         pass  # Add any necessary key release handling here
+
+    def record_calibration_point(self, event):
+        # record the current mouse position and current servo_x position as a calibration point
+        video_x = int((event.x / self.video_canvas.winfo_width()) * 100)
+        servo_x = self.arduino_controller.x_pos
+        # Ensure calibration_points is a dictionary, not an int
+        if not isinstance(self.calibration_points, dict):
+            self.calibration_points = {}
+        self.calibration_points[f"{video_x}, 30"] = (servo_x, 30)
+        # save the calibration point to UI/calibration_mesh.json
+        with open("UI/calibration_mesh.json", "w") as f:
+            json.dump(self.calibration_points, f)
+        self.settings_text.insert(
+            tk.END, f"Calibrated video_x: {video_x} with servo_x: {servo_x}\n"
+        )
 
     def update_servo_position(self, delta_x, delta_y):
         # Update servo positions based on delta_x and delta_y
@@ -279,7 +305,7 @@ class VideoStreamApp:
         y = int((event.y / height) * 100)
         # Update the coordinates label
         self.coord_label.configure(text=f"Coordinates: ({x}, {y})")
-        if self.manual_control:
+        if self.mouse_control:
             # set the target servo_x position based on the mouse x position
             servo_x = targeting.map_video_x_to_servo(x)
             if servo_x is not None:
