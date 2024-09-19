@@ -8,16 +8,15 @@ from scipy.interpolate import griddata
 calibration_mesh = {}
 
 
-def map_to_servo(top_left, bottom_right):
+def map_video_x_to_servo(video_x):
     """
-    Maps the coordinates of the center of a bounding box to servo positions.
+    Maps the video x-coordinate to servo positions.
 
     Args:
-        top_left (tuple): (x, y) coordinates of the top left corner of the bounding box.
-        bottom_right (tuple): (x, y) coordinates of the bottom right corner of the bounding box.
+        video_x (float): x coordinate on the video stream (0 to 100).
 
     Returns:
-        tuple: (servo_x, servo_y) positions for the servo motor.
+        float: servo_x position for the servo motor.
     """
     global calibration_mesh
 
@@ -28,31 +27,71 @@ def map_to_servo(top_left, bottom_right):
                 calibration_mesh = json.load(f)
         except FileNotFoundError:
             print("Error: calibration_mesh.json file not found.")
-            return None, None
+            return None
         except json.JSONDecodeError:
             print("Error: Failed to decode JSON from calibration_mesh.json.")
-            return None, None
-
-    # Calculate the center of the bounding box
-    center_x = (top_left[0] + bottom_right[0]) / 2
-    center_y = (top_left[1] + bottom_right[1]) / 2
+            return None
 
     try:
-        # Extract x and y points and corresponding servo values from the calibration mesh
+        # Extract x points and corresponding servo values from the calibration mesh
         x_points = np.array([float(k.split(",")[0]) for k in calibration_mesh.keys()])
-        y_points = np.array([float(k.split(",")[1]) for k in calibration_mesh.keys()])
         servo_x_values = np.array([v[0] for v in calibration_mesh.values()])
-        servo_y_values = np.array([v[1] for v in calibration_mesh.values()])
+
+        # Sort the x points and corresponding servo values in ascending order
+        sorted_indices = np.argsort(x_points)
+        x_points = x_points[sorted_indices]
+        servo_x_values = servo_x_values[sorted_indices]
 
         # Perform linear interpolation on the x-axis
-        servo_x = np.interp(center_x, x_points, servo_x_values)
-        # Perform linear interpolation on the y-axis
-        servo_y = np.interp(center_y, y_points, servo_y_values)
+        servo_x = np.interp(video_x, x_points, servo_x_values)
     except Exception as e:
         print(f"Error during interpolation: {e}")
-        return None, None
+        return None
 
-    return servo_x, servo_y
+    return servo_x
+
+
+def map_servo_x_to_video_x(servo_x):
+    """
+    Maps the servo positions to coordinates on the video stream.
+
+    Args:
+        servo_x (float): The servo_x position.
+
+    Returns:
+        float: x coordinate on the video stream.
+    """
+    global calibration_mesh
+
+    if not calibration_mesh:
+        try:
+            # Load the calibration mesh from the JSON file
+            with open("UI/calibration_mesh.json", "r") as f:
+                calibration_mesh = json.load(f)
+        except FileNotFoundError:
+            print("Error: calibration_mesh.json file not found.")
+            return None
+        except json.JSONDecodeError:
+            print("Error: Failed to decode JSON from calibration_mesh.json.")
+            return None
+
+    try:
+        # Extract x points and corresponding servo values from the calibration mesh
+        x_points = np.array([float(k.split(",")[0]) for k in calibration_mesh.keys()])
+        servo_x_values = np.array([v[0] for v in calibration_mesh.values()])
+
+        # Sort the x points and corresponding servo values in ascending order
+        sorted_indices = np.argsort(x_points)
+        x_points = x_points[sorted_indices]
+        servo_x_values = servo_x_values[sorted_indices]
+
+        # Perform linear interpolation on the x-axis
+        x = np.interp(servo_x, servo_x_values, x_points)
+    except Exception as e:
+        print(f"Error during interpolation: {e}")
+        return None
+
+    return x
 
 
 def calibrate_x_axis(app):

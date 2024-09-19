@@ -117,14 +117,65 @@ class VideoStreamApp:
 
     def key_press(self, event):
         if self.manual_control:
-            if event.keysym == "Up":
-                self.update_servo_position(0, -10)
-            elif event.keysym == "Down":
-                self.update_servo_position(0, 10)
-            elif event.keysym == "Left":
-                self.update_servo_position(-10, 0)
-            elif event.keysym == "Right":
-                self.update_servo_position(10, 0)
+            actions = {
+                "Up": lambda: self.arduino_controller.update_position(
+                    self.arduino_controller.x_pos,
+                    self.arduino_controller.y_pos - self.arduino_controller.step_size,
+                    "UP",
+                )
+                or self.settings_text.insert(tk.END, "Moved UP\n"),
+                "Down": lambda: self.arduino_controller.update_position(
+                    self.arduino_controller.x_pos,
+                    self.arduino_controller.y_pos + self.arduino_controller.step_size,
+                    "DOWN",
+                )
+                or self.settings_text.insert(tk.END, "Moved DOWN\n"),
+                "Left": lambda: self.arduino_controller.update_position(
+                    self.arduino_controller.x_pos - self.arduino_controller.step_size,
+                    self.arduino_controller.y_pos,
+                    "LEFT",
+                )
+                or self.settings_text.insert(tk.END, "Moved LEFT\n"),
+                "Right": lambda: self.arduino_controller.update_position(
+                    self.arduino_controller.x_pos + self.arduino_controller.step_size,
+                    self.arduino_controller.y_pos,
+                    "RIGHT",
+                )
+                or self.settings_text.insert(tk.END, "Moved RIGHT\n"),
+                "q": lambda: self.arduino_controller.update_position(225, 45, "UP-LEFT")
+                or self.settings_text.insert(tk.END, "Moved UP-LEFT\n"),
+                "e": lambda: self.arduino_controller.update_position(45, 45, "UP-RIGHT")
+                or self.settings_text.insert(tk.END, "Moved UP-RIGHT\n"),
+                "w": lambda: self.arduino_controller.update_position(
+                    135, 45, "UP-CENTER"
+                )
+                or self.settings_text.insert(tk.END, "Moved UP-CENTER\n"),
+                "a": lambda: self.arduino_controller.update_position(
+                    225, 0, "DOWN-LEFT"
+                )
+                or self.settings_text.insert(tk.END, "Moved DOWN-LEFT\n"),
+                "d": lambda: self.arduino_controller.update_position(
+                    45, 0, "DOWN-RIGHT"
+                )
+                or self.settings_text.insert(tk.END, "Moved DOWN-RIGHT\n"),
+                "s": lambda: self.arduino_controller.update_position(
+                    135, 0, "DOWN-CENTER"
+                )
+                or self.settings_text.insert(tk.END, "Moved DOWN-CENTER\n"),
+                "space": lambda: self.arduino_controller.toggle_solenoid()
+                or self.settings_text.insert(tk.END, "Toggled Solenoid\n"),
+            }
+
+            action = actions.get(event.keysym)
+            if action:
+                action()
+            else:
+                print(f"Unmapped key pressed: {event.keysym}")
+                self.settings_text.insert(
+                    tk.END, f"Unmapped key pressed: {event.keysym}\n"
+                )
+
+        self.settings_text.see(tk.END)
 
     def key_release(self, event):
         pass  # Add any necessary key release handling here
@@ -201,6 +252,21 @@ class VideoStreamApp:
                         anchor=tk.CENTER,
                         image=imgtk,
                     )
+                    if self.manual_control:
+                        # Draw a vertical red line mapped using map_servo_x_to_video_x. This line should only be drawn over the actual video feed, not the entire canvas.
+                        servo_x = self.arduino_controller.x_pos
+                        video_x = targeting.map_servo_x_to_video_x(servo_x)
+                        if video_x is not None:
+                            line_x = int((video_x / 100) * new_width)
+                            self.video_canvas.create_line(
+                                line_x,
+                                (canvas_height - new_height) // 2,
+                                line_x,
+                                (canvas_height + new_height) // 2,
+                                fill="red",
+                                width=2,
+                            )
+
         self.root.after(50, self.update_video)
 
     def mouse_motion(self, event):
@@ -212,6 +278,19 @@ class VideoStreamApp:
         y = int((event.y / height) * 100)
         # Update the coordinates label
         self.coord_label.configure(text=f"Coordinates: ({x}, {y})")
+        if self.manual_control:
+            # set the target servo_x position based on the mouse x position
+            servo_x = targeting.map_video_x_to_servo(x)
+            if servo_x is not None:
+                self.arduino_controller.update_position(
+                    servo_x, self.arduino_controller.y_pos, "Mouse Tracking"
+                )
+                self.settings_text.insert(
+                    tk.END, f"Servo position updated: x={servo_x}\n"
+                )
+                print(f"Servo position updated: x={servo_x}")
+                self.settings_text.see(tk.END)
+
         # print(f"Mouse moved to ({x}, {y})")
 
     def mouse_click(self, event):
