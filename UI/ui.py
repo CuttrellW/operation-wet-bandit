@@ -14,7 +14,7 @@ class VideoStreamApp:
         self.calibration_points = 3  # Set the number of calibration points
         self.recticle_color = "green"  # Set the color of the recticle
         # initialize the command ui
-        self.spoof_arduino = False
+        self.spoof_arduino = True
         print("Initializing Arduino Controller")
         self.arduino_controller = command_ui.ArduinoController(spoof=self.spoof_arduino)
         self.arduino_controller.connect()
