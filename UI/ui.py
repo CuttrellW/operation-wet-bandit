@@ -14,7 +14,7 @@ class VideoStreamApp:
         self.calibration_points = 3  # Set the number of calibration points
         self.recticle_color = "green"  # Set the color of the recticle
         # initialize the command ui
-        self.spoof_arduino = True
+        self.spoof_arduino = False
         print("Initializing Arduino Controller")
         self.arduino_controller = command_ui.ArduinoController(spoof=self.spoof_arduino)
         self.arduino_controller.connect()
@@ -193,13 +193,19 @@ class VideoStreamApp:
             x = int((event.x / width) * 100)
             y = int((event.y / height) * 100)
             # Print the coordinates to the settings_text
-            self.settings_text.insert(tk.END, f"Mouse moved to: ({x}, {y})\n")
+            # self.settings_text.insert(tk.END, f"Mouse moved to: ({x}, {y})\n")
             # target the servo to the mouse position
             new_x = targeting.map_video_x_to_servo(x)
             # new y will be a math function, mapping values from 50-30 to 0-30.
             new_y = 30 - (y - 50) * 0.6
 
             self.arduino_controller.update_position(new_x, new_y, "Mouse Control")
+            self.settings_text.insert(
+                tk.END,
+                f"MOUSE CONTROL: Updated position to x={round(new_x,0)}, y={round(new_y,0)}\n",
+            )
+            # update the coordinates label
+            self.coord_label.config(text=f"Coordinates: ({x}, {y})")
             self.settings_text.see(tk.END)
 
     def toggle_auto_targeting(self):
@@ -266,7 +272,7 @@ class VideoStreamApp:
             self.recticle_color = "green"
         # self.settings_text.insert(tk.END, "Toggled Recticle Color\n")
 
-    def update_video(self, verbose=False):
+    def update_video(self, verbose=True):
         ret, frame = self.cap.read()
         if ret:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -329,7 +335,7 @@ class VideoStreamApp:
                         if verbose:
                             self.settings_text.insert(
                                 tk.END,
-                                f"Auto-targeting updated position to x={person_x}\n",
+                                f"Auto-targeting updated position to x={round(person_x,0)}\n",
                             )
                         self.settings_text.see(tk.END)
                         # Draw crosshair on the video canvas
